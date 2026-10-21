@@ -36,6 +36,7 @@ Every conversion is the sum of two layers:
    |---|---|
    | `actlize` (0.5.0 / 0.8.0 / 1.0.0) | none -- fully covered by the general rules |
    | `flash-attention` (2.7.2 / 2.7.4 / 2.8.2) | none -- fully covered by the general rules |
+   | `flashkda` | none -- PPU sources and the pinned `actlize` submodule use the general rules |
    | `xformers` (0.0.27) | none -- the `COMPATIBLE_ARCH` / `__COMPATIBLECC_VER_*` SAILify platform naming lives in the general map (`NON_SDK_SAILIFY_MAP`) |
    | `flashmla` | drop the forward-declared `cudaStream_t` typedef; link `libcuda`; enable the ptxas resource report |
    | `deepgemm` | JIT compiler rewrites (nvcc discovery, version query, flag-set translation, RTC include paths); `python_api.cpp` -> `.cu`; `#if defined(__HGGC__)` guard removal; setup.py / `__init__.py` SDK-root plumbing; CMakeLists.txt restoration |
@@ -83,6 +84,24 @@ python3 cudafy.py flash-attention --version=2.8.2 /path/to/flash-attention
 
 Supported versions: `2.7.2`, `2.7.4`, `2.8.2` (informational only). FA2 and
 FA3 (`hopper/`) are converted in one run.
+
+### FlashKDA
+
+```bash
+cd /path/to/FlashKDA-ppu-build
+git submodule update --init actlize
+python3 /path/to/cudafy-for-sail/cudafy.py flashkda . --dry-run
+python3 /path/to/cudafy-for-sail/cudafy.py flashkda .
+FLASH_KDA_BACKEND=ppu MAX_JOBS=4 python3 setup.py build_ext --inplace
+```
+
+Run this in a separate build checkout: conversion modifies the target in place.
+The command validates the FlashKDA PPU layout and initialized local ACTLIZE
+headers before applying the general rules to both. A symlink at `actlize`
+is rejected so a shared dependency is not modified. No FlashKDA residual script
+is needed. PPU inline assembly and `__HGGC_ARCH__` remain unchanged; this targets
+the PPU SDK's CUDA-compatible toolchain, not NVIDIA hardware. The original
+`cutlass/` submodule and CUDA implementation remain separate from ACTLIZE.
 
 ### xFormers
 

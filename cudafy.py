@@ -9,7 +9,7 @@ Three ways to run a conversion:
       converted together with the tree, so no separate actlize step is needed.
 
   python3 cudafy.py <repo> [--version=X] <path>
-      actlize, flash-attention and xformers are fully covered by the
+      actlize, flash-attention, flashkda and xformers are fully covered by the
       general rules (their per-repo scripts are gone); the command runs the
       general engine directly, keeping the historical CLI shape. deepgemm /
       flashmla additionally apply their residual rules via the per-repo
@@ -41,7 +41,7 @@ RESIDUAL_REGISTRY = {
 }
 
 KNOWN_COMMANDS = {
-    "general", "actlize", "flash-attention", "xformers",
+    "general", "actlize", "flash-attention", "flashkda", "xformers",
 } | set(RESIDUAL_REGISTRY)
 
 
@@ -151,6 +151,22 @@ def run_flash_attention(args: argparse.Namespace) -> int:
                         version=args.version, label="flash-attention")
 
 
+def run_flashkda(args: argparse.Namespace) -> int:
+    target = Path(_require_target(args.target, "target FlashKDA directory"))
+    required = ("setup.py", "csrc/flash_kda.cpp", "csrc/fwd.h",
+                "csrc/ppu/build.py", "flash_kda/__init__.py")
+    if not all((target / path).is_file() for path in required):
+        raise SystemExit(f"ERROR: {target} is not a FlashKDA PPU root directory.")
+    actlize = target / "actlize"
+    if actlize.is_symlink():
+        raise SystemExit("ERROR: actlize must be a local submodule checkout, "
+                         "not a symlink to a shared dependency.")
+    if not (actlize / "include" / "ppu" / "ppu_include.hpp").is_file():
+        raise SystemExit("ERROR: initialize the FlashKDA dependency first: "
+                         "git submodule update --init actlize")
+    return _run_general(str(target), args.dry_run, args.verbose, label="flashkda")
+
+
 def run_residual(command: str, args: argparse.Namespace) -> int:
     script_path = RESIDUAL_REGISTRY[command]
     target = _require_target(args.target, "target repository directory")
@@ -199,6 +215,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Informational only; the general rules are version-independent")
     add_common_repo_args(flash_attention)
     flash_attention.set_defaults(func=run_flash_attention)
+
+    flashkda = subparsers.add_parser(
+        "flashkda", help="Convert FlashKDA and its ACTLIZE submodule (general rules only)")
+    add_common_repo_args(flashkda)
+    flashkda.set_defaults(func=run_flashkda)
 
     deepgemm = subparsers.add_parser("deepgemm", help="Convert a DeepGEMM repository")
     add_common_repo_args(deepgemm)
